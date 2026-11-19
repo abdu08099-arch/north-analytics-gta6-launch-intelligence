@@ -96,7 +96,8 @@ def _cmd_collect(settings: Settings, args: argparse.Namespace) -> int:
         print(
             f"{r.source_id:<15} {r.status.value:<8} artifacts: {r.artifact_count}  run: {r.run_id}"
         )
-    return EXIT_FAILED_RUN if any(r.status is RunStatus.FAILED for r in results) else EXIT_OK
+    incomplete = {RunStatus.FAILED, RunStatus.PARTIAL}
+    return EXIT_FAILED_RUN if any(r.status in incomplete for r in results) else EXIT_OK
 
 
 def _cmd_runs(settings: Settings, args: argparse.Namespace) -> int:

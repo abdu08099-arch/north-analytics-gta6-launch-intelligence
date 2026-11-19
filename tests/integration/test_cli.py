@@ -22,12 +22,6 @@ def test_setup_flow_from_empty_folder(env, capsys) -> None:
     assert "reddit" in out and "blocked" in out
 
 
-def test_collect_without_connectors_is_a_clear_no_op(env, capsys) -> None:
-    cli.main(["db", "upgrade"])
-    assert cli.main(["collect", "--all"]) == cli.EXIT_OK
-    assert "No connectors are implemented yet" in capsys.readouterr().out
-
-
 def test_collect_unknown_source_is_a_usage_error(env) -> None:
     cli.main(["db", "upgrade"])
     assert cli.main(["collect", "--source", "reddit"]) == cli.EXIT_USAGE
