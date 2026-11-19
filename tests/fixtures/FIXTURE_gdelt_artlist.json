@@ -1,0 +1,4 @@
+{"articles": [
+  {"url": "https://example.com/FIXTURE-article-1", "url_mobile": "", "title": "FIXTURE headline one - not real data", "seendate": "20261118T173000Z", "socialimage": "", "domain": "example.com", "language": "English", "sourcecountry": "United Kingdom"},
+  {"url": "https://example.org/FIXTURE-article-2", "url_mobile": "", "title": "FIXTURE headline two - not real data", "seendate": "20261118T120000Z", "socialimage": "", "domain": "example.org", "language": "Danish", "sourcecountry": "Denmark"}
+]}

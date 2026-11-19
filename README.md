@@ -5,7 +5,7 @@ A data science project analyzing global GTA VI launch interest using Python, Goo
 
 ## Status
 
-**Phase 1 — Reliable foundation.** Configuration, logging, database schema and run tracking are in place. No data is collected yet; the first connectors come in Phase 2. Background: [Phase 0 report](docs/architecture/phase-0-discovery-report.md).
+**Phase 2 — First pipeline.** Foundation (config, logging, schema, run tracking) is in place. The GDELT news connector stores raw data; parsing into analysis tables comes next. Background: [Phase 0 report](docs/architecture/phase-0-discovery-report.md).
 
 | Source | Status |
 |---|---|
@@ -64,7 +64,8 @@ Everyday commands:
 | `uv run pytest` | Run all tests |
 | `uv run ruff check src tests` | Lint |
 | `uv run ruff format src tests` | Auto-format |
-| `uv run gta6 collect --all` | Run every implemented connector (none yet) |
+| `uv run gta6 collect --source gdelt` | Collect GDELT news coverage (about 30 seconds; GDELT allows one request every 5 seconds) |
+| `uv run gta6 collect --all` | Run every implemented connector |
 | `uv run gta6 runs` | Show recent collection runs and failures |
 
 To run the tests against PostgreSQL as well (CI does this on every PR), point `TEST_DATABASE_URL` at a **throwaway** database; its schema is wiped before each test:

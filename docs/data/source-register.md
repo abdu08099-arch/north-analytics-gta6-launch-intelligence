@@ -14,7 +14,7 @@ Every source must be re-checked before its connector is built (PRD §8). Terms, 
 | Official access | Web CSV export; API alpha by application | Public web pages only | YouTube Data API v3 | Data API (closed to new requests) | DOC 2.0 API | X API v2 |
 | Auth | None (export) / API key (alpha) | None | API key (Google Cloud project) | OAuth | None | Bearer token |
 | Cost | Free | Free | Free (quota) | Commercial agreement only | Free | Pay-per-use |
-| Rate limit / quota | Manual; alpha limits not public | n/a (manual) | 10,000 units/day; `search.list` has its own bucket since 2026-06-01 | 100 QPM (existing approved apps only) | Rate-limited; ~1 request / 5 s (verify) | Spend cap you set; 3M post reads/month cap |
+| Rate limit / quota | Manual; alpha limits not public | n/a (manual) | 10,000 units/day; `search.list` has its own bucket since 2026-06-01 | 100 QPM (existing approved apps only) | 1 request / 5 s (confirmed by GDELT's 429 message) | Spend cap you set; 3M post reads/month cap |
 | Retention rules | Attribution to Google required | Attribution; no copying of full posts | **Delete or refresh stored API data within 30 days**; no derived metrics without amendment | n/a | Open data; cite GDELT | Per developer agreement (verify) |
 | Automatable daily | No (until alpha access) | No (by design) | Yes | — | Yes | Yes |
 | Backfill | Yes (exports cover past windows) | Yes (manual) | Limited | — | **Only ~3 months** | Counts: recent ~7 days (verify); full archive costs more |
@@ -85,7 +85,9 @@ Every source must be re-checked before its connector is built (PRD §8). Terms, 
 - `timelinevol` mode returns coverage volume as a **percentage of all articles GDELT monitors**: a normalised share, not an article count. Article-list mode returns URL, title, domain, language, source country and tone. We do not need article bodies, and we do not store them.
 - The search window is a **rolling ~3 months**. Coverage older than that cannot be fetched later through this API, so we must collect continuously from now on.
 - A maintained Python client (`gdeltdoc`, MIT) exists. Calling the HTTP API directly is just as simple.
-- Rate guidance of about one request per 5 seconds is reported by third-party clients (verify on the GDELT blog).
+- **Confirmed 2026-11-19:** GDELT itself answers faster requests with HTTP 429 and the message "Please limit requests to one every 5 seconds". The connector waits 6 seconds between requests.
+- From Anthropic's cloud workspace, GDELT often reset the connection (shared IP, likely throttled). Run the connector from a personal machine or GitHub Actions.
+- Article lists show syndication: the same story appears under several domains with the same title. Deduplicate before counting stories (PRD §8.5).
 - Paid news APIs (NewsAPI, GNews and others) were not evaluated in depth. Their free tiers are usually development-only. Revisit only if GDELT proves insufficient.
 
 **Metric rule:** label as "share of monitored news coverage". It is not audience size and not consumer demand (PRD Appendix B).

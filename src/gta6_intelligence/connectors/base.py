@@ -7,6 +7,7 @@ Parsing and validation into observation tables are added in Phase 2.
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -36,5 +37,9 @@ class BaseConnector(ABC):
     source_id: str
 
     @abstractmethod
-    def fetch(self, ctx: FetchContext) -> list[FetchedPayload]:
-        """Fetch raw payloads. Raise an exception on failure; the runner records it."""
+    def fetch(self, ctx: FetchContext) -> Iterator[FetchedPayload]:
+        """Yield raw payloads one at a time. Raise an exception on failure.
+
+        The runner stores each payload as soon as it is yielded, so if a later
+        request fails, what was already fetched is kept and the run is `partial`.
+        """
