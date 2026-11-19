@@ -140,7 +140,7 @@ The phases follow PRD §16. Each task is one small branch and PR.
 
 **Exit:** decisions 0001–0004 approved or changed; first Phase 1 issues created.
 
-### Phase 1 — Reliable foundation (~1 week)
+### Phase 1 — Reliable foundation (~1 week) — built on branch `feature/phase-1-foundation`
 
 | PR | Branch | Files |
 |---|---|---|
