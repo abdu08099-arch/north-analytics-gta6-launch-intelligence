@@ -221,3 +221,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- North Analytics project data ---
+# Raw, staging and processed data are never committed (see data/README.md).
+data/*
+!data/README.md
+!data/reference/
