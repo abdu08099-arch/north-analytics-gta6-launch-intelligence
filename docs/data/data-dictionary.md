@@ -54,3 +54,63 @@ One row per raw payload saved unchanged to disk.
 | `retrieved_at` | timestamp UTC | When we received it |
 | `coverage_start`, `coverage_end` | timestamp UTC | Period the payload describes, when known (e.g. a Trends export window) |
 | `request_params` | JSON | Exact query parameters (query, geo, window, …), with no secrets |
+
+---
+
+# Phase 2 tables (migration `0002`)
+
+## `artifact_processing`
+One row per raw artifact that a processor has handled.
+
+| Column | Meaning |
+|---|---|
+| `artifact_id` | PK and FK → `raw_artifacts` |
+| `processor`, `processor_version` | Which parsing rules produced the rows |
+| `status` | `processed`, `partial` (some records quarantined) or `failed` (file unreadable; it is retried on the next `gta6 process`) |
+| `processed_at` | UTC |
+| `rows_written`, `rows_rejected` | Counts |
+| `error_message` | Why it failed (e.g. checksum mismatch, unknown CSV layout) |
+
+## `quarantined_records`
+Records that failed validation, kept with the reason (PRD F3): `artifact_id`, `source_id`, `reason`, `record` (the original values as JSON), `quarantined_at`.
+
+## `news_coverage_points` (GDELT timeline)
+| Column | Meaning |
+|---|---|
+| `artifact_id` | Snapshot it came from. Overlapping snapshots are kept apart, never summed |
+| `query` | Exact GDELT query string |
+| `resolution` | As reported by GDELT (`hour` for multi-day windows) |
+| `period_start` | UTC start of the period |
+| `matching_articles` | Articles matching the query in that period |
+| `total_monitored` | All articles GDELT monitored in that period. Share = matching ÷ monitored |
+| `retrieved_at` | When the snapshot was fetched |
+
+## `news_articles` (GDELT article lists)
+Metadata only, no article text. `url` (unique: each article stored once), `title`, `domain`, `language`, `source_country`, `seen_at` (when GDELT first saw it, UTC), `story_key` (same normalised title on the same UTC day, used to group syndicated copies), `query`, `first_artifact_id`.
+
+## `search_observations` (Google Trends)
+| Column | Meaning |
+|---|---|
+| `artifact_id` | The export file (snapshot) |
+| `series_label` | Column header from the export, e.g. `GTA 6: (Denmark)` |
+| `query`, `query_kind` | Slug and `term`/`topic`, from the file name (see the protocol) |
+| `geo` | `WW` or country code |
+| `granularity` | `hour`, `day`, `week` or `month` |
+| `period_start` | UTC start of the period |
+| `interest_value` | 0–100, relative **within this export only**; NULL when `<1` or missing |
+| `value_flag` | `<1`, `missing` or NULL |
+| `export_window` | e.g. `past-90-days` |
+
+## `event_milestones`
+Loaded from `data/reference/event_milestones.csv`, the full current list; a new file version replaces the table.
+
+| Column | Meaning |
+|---|---|
+| `event_id` | Stable id, e.g. `2026-11-19-release` |
+| `event_name`, `event_type` | Type is one of: announcement, delay, trailer, preorder, preload, release, online_launch, update, earnings, other |
+| `event_date` | Date of the event |
+| `published_at` | Official publication time with timezone, if known |
+| `source_url`, `source_kind` | `official` (Rockstar, Take-Two) or `secondary` (press) |
+| `verification_status` | `verified` requires an official source **and** a named reviewer; `unverified`; `disputed` |
+| `reviewer`, `notes`, `summary` | Our own short factual summary, never copied text |
+| `artifact_id` | The exact ledger file version it was loaded from |

@@ -5,13 +5,13 @@ A data science project analyzing global GTA VI launch interest using Python, Goo
 
 ## Status
 
-**Phase 2 — First pipeline.** Foundation (config, logging, schema, run tracking) is in place. The GDELT news connector stores raw data; parsing into analysis tables comes next. Background: [Phase 0 report](docs/architecture/phase-0-discovery-report.md).
+**Phase 2 — First pipeline.** Three sources go from raw files to tables to JSON data products: GDELT news coverage, the curated event ledger, and manual Google Trends exports. The dashboard (Phase 5) will read the products in `data/products/`. Background: [Phase 0 report](docs/architecture/phase-0-discovery-report.md).
 
 | Source | Status |
 |---|---|
-| Google Trends | Feasible (manual export; API alpha application recommended) |
-| Rockstar / official events | Feasible (curated ledger) |
-| News (GDELT) | Feasible (automated) |
+| Google Trends | Importer built; waiting for the first real export ([protocol](docs/methodology/google-trends-protocol.md)) |
+| Rockstar / official events | Ledger built; 6 events entered, all still **unverified** |
+| News (GDELT) | Connector and parser built; live run to be confirmed from a personal machine |
 | YouTube | Conditional (policy review) |
 | X | Deferred (needs cost approval) |
 | Reddit | Blocked (public API closed to new apps) |
@@ -65,7 +65,11 @@ Everyday commands:
 | `uv run ruff check src tests` | Lint |
 | `uv run ruff format src tests` | Auto-format |
 | `uv run gta6 collect --source gdelt` | Collect GDELT news coverage (about 30 seconds; GDELT allows one request every 5 seconds) |
+| `uv run gta6 collect --source event_ledger` | Load the curated events file (only when it changed) |
+| `uv run gta6 collect --source google_trends` | Import Trends CSVs from `data/inbox/google_trends/` ([protocol](docs/methodology/google-trends-protocol.md)) |
 | `uv run gta6 collect --all` | Run every implemented connector |
+| `uv run gta6 process --all` | Parse stored raw files into tables; bad records go to quarantine |
+| `uv run gta6 publish` | Write `status.json`, `events.json`, `news_coverage_daily.json` to `data/products/` |
 | `uv run gta6 runs` | Show recent collection runs and failures |
 
 To run the tests against PostgreSQL as well (CI does this on every PR), point `TEST_DATABASE_URL` at a **throwaway** database; its schema is wiped before each test:

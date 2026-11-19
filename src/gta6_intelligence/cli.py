@@ -5,6 +5,8 @@ Commands
   gta6 db seed-sources     write the six PRD sources and their status to the database
   gta6 sources             list sources and status
   gta6 collect --source X  run one connector (or --all for every registered one)
+  gta6 process --source X  parse stored raw artifacts into tables (or --all)
+  gta6 publish             write the dashboard's JSON data products to data/products/
   gta6 runs                show recent collection runs
 """
 
@@ -22,6 +24,9 @@ from gta6_intelligence.connectors.registry import CONNECTORS
 from gta6_intelligence.db import migrate
 from gta6_intelligence.db.models import CollectionRun, RunStatus, RunTrigger, Source
 from gta6_intelligence.db.session import make_engine, make_session_factory
+from gta6_intelligence.processing.registry import PROCESSORS
+from gta6_intelligence.processing.runner import process_pending
+from gta6_intelligence.reporting.products import publish
 from gta6_intelligence.sources.catalog import seed_sources
 from gta6_intelligence.utils.logging import configure_logging
 
@@ -100,6 +105,40 @@ def _cmd_collect(settings: Settings, args: argparse.Namespace) -> int:
     return EXIT_FAILED_RUN if any(r.status in incomplete for r in results) else EXIT_OK
 
 
+def _cmd_process(settings: Settings, args: argparse.Namespace) -> int:
+    if args.all:
+        selected = list(PROCESSORS)
+    elif args.source in PROCESSORS:
+        selected = [args.source]
+    else:
+        print(
+            f"No processor for {args.source!r}. Available: {', '.join(PROCESSORS)}.",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE
+    factory = make_session_factory(make_engine(settings.database_url))
+    any_failed = False
+    for source_id in selected:
+        summary = process_pending(
+            PROCESSORS[source_id](), session_factory=factory, raw_store=RawStore(settings.raw_dir)
+        )
+        any_failed |= summary.failed > 0
+        print(
+            f"{source_id:<15} artifacts: {summary.artifacts}  rows: {summary.rows_written}  "
+            f"quarantined: {summary.rows_rejected}  failed: {summary.failed}"
+        )
+    return EXIT_FAILED_RUN if any_failed else EXIT_OK
+
+
+def _cmd_publish(settings: Settings, _args: argparse.Namespace) -> int:
+    factory = make_session_factory(make_engine(settings.database_url))
+    with factory() as session:
+        paths = publish(session, settings.products_dir)
+    for path in paths:
+        print(f"wrote {path}")
+    return EXIT_OK
+
+
 def _cmd_runs(settings: Settings, args: argparse.Namespace) -> int:
     factory = make_session_factory(make_engine(settings.database_url))
     with factory() as session:
@@ -133,6 +172,14 @@ def build_parser() -> argparse.ArgumentParser:
     target.add_argument("--all", action="store_true", help="every registered connector")
     collect.add_argument("--scheduled", action="store_true", help="mark run as scheduled")
     collect.set_defaults(func=_cmd_collect)
+
+    process = sub.add_parser("process", help="parse raw artifacts into tables")
+    ptarget = process.add_mutually_exclusive_group(required=True)
+    ptarget.add_argument("--source", help="source_id to process")
+    ptarget.add_argument("--all", action="store_true", help="every source with a processor")
+    process.set_defaults(func=_cmd_process)
+
+    sub.add_parser("publish", help="write JSON data products").set_defaults(func=_cmd_publish)
 
     runs = sub.add_parser("runs", help="recent collection runs")
     runs.add_argument("--limit", type=int, default=20)

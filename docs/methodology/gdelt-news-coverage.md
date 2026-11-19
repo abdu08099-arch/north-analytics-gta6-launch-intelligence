@@ -1,6 +1,6 @@
 # GDELT news coverage — method
 
-**Connector:** `src/gta6_intelligence/connectors/gdelt.py` · **Source register:** §5 · **Status:** raw collection only (parsing next)
+**Connector:** `src/gta6_intelligence/connectors/gdelt.py` · **Source register:** §5 · **Status:** collected, parsed (`news_coverage_points`, `news_articles`) and published as `news_coverage_daily.json`
 
 ## Query
 
@@ -31,3 +31,7 @@ All responses are stored unchanged in `data/raw/gdelt/…` with a SHA-256 checks
 - GDELT allows one request every 5 seconds. The connector waits 6 seconds, retries at most 3 times, and then records the run as `failed` or `partial`.
 - GDELT's search window is about 3 months. Run the connector **at least weekly** until the daily schedule exists (Decision 0004). Daily runs are better.
 - From Anthropic's cloud workspace GDELT answered mostly with HTTP 429 on 2026-11-19 (a shared IP). Run it from your own machine.
+
+## Daily series (data product)
+
+`news_coverage_daily.json` gives one value per UTC day. Each day comes from the **most recent snapshot that covers the whole day**. Snapshots are never added together. `complete` is true only when the snapshot has every expected point for the day (24 for hourly data). `coverage_share` is empty when GDELT did not report the monitored total.
