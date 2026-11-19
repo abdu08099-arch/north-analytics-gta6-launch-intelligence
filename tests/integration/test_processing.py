@@ -305,7 +305,9 @@ def test_status_product_reports_freshness_and_quality(session_factory, raw_store
     assert status["reddit"]["status"] == "blocked" and status["reddit"]["last_run"] is None
 
 
-@pytest.mark.parametrize("name", ["status.json", "events.json", "news_coverage_daily.json"])
+@pytest.mark.parametrize(
+    "name", ["status.json", "events.json", "news_coverage_daily.json", "search_interest.json"]
+)
 def test_publish_writes_every_product(session_factory, tmp_path, name):
     from gta6_intelligence.reporting.products import publish
 
@@ -313,4 +315,22 @@ def test_publish_writes_every_product(session_factory, tmp_path, name):
         paths = publish(s, tmp_path / "products")
     payload = json.loads((tmp_path / "products" / name).read_text())
     assert payload["generated_at"] and "data" in payload
-    assert len(paths) == 3
+    assert len(paths) == 4
+
+
+def test_search_interest_product_keeps_snapshots_apart(session_factory, raw_store, tmp_path):
+    from gta6_intelligence.reporting.products import build_search_interest
+
+    connector = _inbox(
+        tmp_path,
+        "2026-11-19_DK_past-90-days_term-gta-6_allan.csv",
+        (FIXTURES / "FIXTURE_trends_daily.csv").read_bytes(),
+    )
+    _collect_and_process(connector, GoogleTrendsCsvProcessor(), session_factory, raw_store)
+    with session_factory() as s:
+        product = build_search_interest(s)
+    (snap,) = product["data"]
+    assert snap["geo"] == "DK" and snap["window"] == "past-90-days"
+    (series,) = snap["series"]
+    assert [p["value"] for p in series["points"]] == [12, None, None, 100]
+    assert [p["flag"] for p in series["points"]] == [None, "<1", "missing", None]

@@ -24,6 +24,7 @@ from gta6_intelligence.db.models import (
     QuarantinedRecord,
     RawArtifact,
     RunStatus,
+    SearchObservation,
     Source,
 )
 from gta6_intelligence.utils.time import utc_now
@@ -185,10 +186,57 @@ def build_news_coverage_daily(session: Session) -> dict:
     )
 
 
+def build_search_interest(session: Session) -> dict:
+    """Google Trends exports, one entry per export file (snapshot).
+
+    Values are relative within their own export (0-100). Snapshots are listed
+    separately and must never be joined into one series by the dashboard.
+    """
+    snapshots: dict[str, dict] = {}
+    rows = session.execute(
+        select(SearchObservation, RawArtifact)
+        .join(RawArtifact, RawArtifact.artifact_id == SearchObservation.artifact_id)
+        .order_by(RawArtifact.retrieved_at.desc(), SearchObservation.period_start)
+    ).all()
+    for obs, artifact in rows:
+        snap = snapshots.setdefault(
+            artifact.artifact_id,
+            {
+                "snapshot_id": artifact.artifact_id,
+                "file": artifact.request_params.get("file"),
+                "exported_on": artifact.request_params.get("export_date"),
+                "imported_at": artifact.retrieved_at.isoformat(),
+                "geo": obs.geo,
+                "query": obs.query,
+                "query_kind": obs.query_kind,
+                "window": obs.export_window,
+                "granularity": obs.granularity,
+                "series": {},
+            },
+        )
+        snap["series"].setdefault(obs.series_label, []).append(
+            {"t": obs.period_start.isoformat(), "value": obs.interest_value, "flag": obs.value_flag}
+        )
+    data = [
+        {**snap, "series": [{"label": k, "points": v} for k, v in snap["series"].items()]}
+        for snap in snapshots.values()
+    ]
+    return _envelope(
+        "search_interest",
+        "observed",
+        "Google Trends relative search interest (0-100). Each snapshot is scaled on its own; "
+        "values from different snapshots are not comparable.",
+        data,
+        source="Google Trends (trends.google.com), manual CSV export",
+        unit="relative interest, 0-100 within each snapshot",
+    )
+
+
 PRODUCTS = {
     "status.json": build_status,
     "events.json": build_events,
     "news_coverage_daily.json": build_news_coverage_daily,
+    "search_interest.json": build_search_interest,
 }
 
 
