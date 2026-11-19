@@ -13,6 +13,7 @@ import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from gta6_intelligence import __version__
@@ -27,6 +28,7 @@ from gta6_intelligence.db.models import (
     Source,
     SourceStatus,
 )
+from gta6_intelligence.utils.hashing import sha256_hex
 from gta6_intelligence.utils.time import utc_now
 
 log = logging.getLogger(__name__)
@@ -95,8 +97,14 @@ def run_connector(
     ctx = FetchContext(run_id=run_id, started_at=started_at, collection_mode=mode)
 
     stored = 0
+    unchanged = 0
     try:
         for index, payload in enumerate(connector.fetch(ctx)):
+            if connector.skip_unchanged and _already_stored(
+                session_factory, connector.source_id, sha256_hex(payload.content)
+            ):
+                unchanged += 1
+                continue
             retrieved_at = utc_now()
             written = raw_store.write(
                 source_id=connector.source_id,
@@ -127,14 +135,16 @@ def run_connector(
     except Exception as exc:  # every failure must be recorded, whatever it is
         message = f"{type(exc).__name__}: {exc}"[:MAX_ERROR_LENGTH]
         status = RunStatus.PARTIAL if stored else RunStatus.FAILED
-        _finish(session_factory, run_id, status, fetched=stored, error=message)
+        _finish(session_factory, run_id, status, fetched=stored, error=message, unchanged=unchanged)
         log.exception(
             "run did not complete",
             extra={"run_id": run_id, "source_id": connector.source_id, "artifacts": stored},
         )
         return RunResult(run_id, connector.source_id, status, stored, message)
 
-    _finish(session_factory, run_id, RunStatus.SUCCESS, fetched=stored, error=None)
+    _finish(
+        session_factory, run_id, RunStatus.SUCCESS, fetched=stored, error=None, unchanged=unchanged
+    )
     log.info(
         "run finished",
         extra={"run_id": run_id, "source_id": connector.source_id, "artifacts": stored},
@@ -168,12 +178,24 @@ def _finish(
     *,
     fetched: int,
     error: str | None,
+    unchanged: int = 0,
 ) -> None:
     with session_factory() as session:
         run = session.get(CollectionRun, run_id)
         assert run is not None
         run.status = status
+        run.run_metadata = {**(run.run_metadata or {}), "unchanged_skipped": unchanged}
         run.finished_at = utc_now()
         run.fetched_count = fetched
         run.error_message = error
         session.commit()
+
+
+def _already_stored(session_factory: sessionmaker[Session], source_id: str, sha256: str) -> bool:
+    with session_factory() as session:
+        found = session.scalar(
+            select(RawArtifact.artifact_id).where(
+                RawArtifact.source_id == source_id, RawArtifact.sha256 == sha256
+            )
+        )
+    return found is not None

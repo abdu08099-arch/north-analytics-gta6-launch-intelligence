@@ -35,6 +35,9 @@ class FetchedPayload:
 class BaseConnector(ABC):
     #: Must match a source_id in gta6_intelligence.sources.catalog.
     source_id: str
+    #: If True, a payload whose exact bytes were already stored for this source is
+    #: skipped (used for files we read from disk, like the event ledger or Trends exports).
+    skip_unchanged: bool = False
 
     @abstractmethod
     def fetch(self, ctx: FetchContext) -> Iterator[FetchedPayload]:
