@@ -22,6 +22,7 @@ from sqlalchemy import (
     String,
     Text,
     TypeDecorator,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -160,3 +161,132 @@ class RawArtifact(Base):
     request_params: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     run: Mapped[CollectionRun] = relationship(back_populates="artifacts")
+
+
+# --- Phase 2: processing and observations -------------------------------------------------
+
+
+class ProcessingStatus(enum.StrEnum):
+    PROCESSED = "processed"
+    PARTIAL = "partial"  # some records quarantined
+    FAILED = "failed"  # artifact could not be read at all
+
+
+class VerificationStatus(enum.StrEnum):
+    VERIFIED = "verified"  # checked against an official source by a named reviewer
+    UNVERIFIED = "unverified"  # entered from a secondary source; needs review
+    DISPUTED = "disputed"
+
+
+class ArtifactProcessing(Base):
+    """Which raw artifacts have been parsed, by which processor version, with what result."""
+
+    __tablename__ = "artifact_processing"
+
+    artifact_id: Mapped[str] = mapped_column(
+        ForeignKey("raw_artifacts.artifact_id"), primary_key=True
+    )
+    processor: Mapped[str] = mapped_column(String(100))
+    processor_version: Mapped[str] = mapped_column(String(20))
+    status: Mapped[ProcessingStatus] = mapped_column(_enum(ProcessingStatus, "processing_status"))
+    processed_at: Mapped[datetime] = mapped_column(UtcDateTime())
+    rows_written: Mapped[int] = mapped_column(Integer, default=0)
+    rows_rejected: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text)
+
+
+class QuarantinedRecord(Base):
+    """Records that failed validation. Kept with the reason, never silently dropped (PRD F3)."""
+
+    __tablename__ = "quarantined_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    artifact_id: Mapped[str] = mapped_column(ForeignKey("raw_artifacts.artifact_id"), index=True)
+    source_id: Mapped[str] = mapped_column(ForeignKey("sources.source_id"))
+    reason: Mapped[str] = mapped_column(Text)
+    record: Mapped[dict[str, Any]] = mapped_column(JSON)
+    quarantined_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class NewsCoveragePoint(Base):
+    """One point of a GDELT coverage timeline, at the resolution GDELT returned (often hourly)."""
+
+    __tablename__ = "news_coverage_points"
+    __table_args__ = (
+        UniqueConstraint("artifact_id", "period_start", name="artifact_period"),
+        CheckConstraint("matching_articles >= 0", name="matching_non_negative"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    artifact_id: Mapped[str] = mapped_column(ForeignKey("raw_artifacts.artifact_id"), index=True)
+    query: Mapped[str] = mapped_column(Text)
+    resolution: Mapped[str] = mapped_column(String(20))  # as reported by GDELT, e.g. "hour"
+    period_start: Mapped[datetime] = mapped_column(UtcDateTime(), index=True)
+    matching_articles: Mapped[int] = mapped_column(Integer)
+    total_monitored: Mapped[int | None] = mapped_column(Integer)
+    retrieved_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class NewsArticle(Base):
+    """Article metadata from GDELT article lists. No article text is stored."""
+
+    __tablename__ = "news_articles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    url: Mapped[str] = mapped_column(String(2000), unique=True)
+    title: Mapped[str] = mapped_column(Text)
+    domain: Mapped[str] = mapped_column(String(300), index=True)
+    language: Mapped[str | None] = mapped_column(String(50))
+    source_country: Mapped[str | None] = mapped_column(String(100))
+    seen_at: Mapped[datetime] = mapped_column(UtcDateTime(), index=True)
+    # Same normalised title on the same UTC day -> same story key (syndication dedup).
+    story_key: Mapped[str] = mapped_column(String(64), index=True)
+    query: Mapped[str] = mapped_column(Text)
+    first_artifact_id: Mapped[str] = mapped_column(ForeignKey("raw_artifacts.artifact_id"))
+
+
+class SearchObservation(Base):
+    """One Google Trends value. Relative interest 0-100 within its own export only."""
+
+    __tablename__ = "search_observations"
+    __table_args__ = (
+        UniqueConstraint("artifact_id", "series_label", "period_start", name="artifact_series"),
+        CheckConstraint(
+            "interest_value IS NULL OR (interest_value >= 0 AND interest_value <= 100)",
+            name="interest_range",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    artifact_id: Mapped[str] = mapped_column(ForeignKey("raw_artifacts.artifact_id"), index=True)
+    series_label: Mapped[str] = mapped_column(String(300))  # column header from the export
+    query: Mapped[str] = mapped_column(String(200))  # term or topic, from the file name
+    query_kind: Mapped[str] = mapped_column(String(10))  # "term" or "topic"
+    geo: Mapped[str] = mapped_column(String(10), index=True)  # "WW", "DK", "US", ...
+    granularity: Mapped[str] = mapped_column(String(10))  # "hour", "day", "week", "month"
+    period_start: Mapped[datetime] = mapped_column(UtcDateTime(), index=True)
+    interest_value: Mapped[int | None] = mapped_column(Integer)
+    # "<1" when Trends reports less than 1; NULL value + "missing" when the cell is empty.
+    value_flag: Mapped[str | None] = mapped_column(String(20))
+    export_window: Mapped[str] = mapped_column(String(50))
+
+
+class EventMilestone(Base):
+    """Curated official milestones. Loaded from data/reference/event_milestones.csv."""
+
+    __tablename__ = "event_milestones"
+
+    event_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    event_name: Mapped[str] = mapped_column(String(300))
+    event_type: Mapped[str] = mapped_column(String(50))
+    event_date: Mapped[date] = mapped_column(Date, index=True)
+    published_at: Mapped[datetime | None] = mapped_column(UtcDateTime())
+    source_url: Mapped[str] = mapped_column(String(1000))
+    source_kind: Mapped[str] = mapped_column(String(20))  # "official" or "secondary"
+    summary: Mapped[str] = mapped_column(Text)
+    verification_status: Mapped[VerificationStatus] = mapped_column(
+        _enum(VerificationStatus, "verification_status")
+    )
+    reviewer: Mapped[str | None] = mapped_column(String(100))
+    notes: Mapped[str | None] = mapped_column(Text)
+    artifact_id: Mapped[str] = mapped_column(ForeignKey("raw_artifacts.artifact_id"))
