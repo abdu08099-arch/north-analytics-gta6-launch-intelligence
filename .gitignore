@@ -227,3 +227,6 @@ __marimo__/
 data/*
 !data/README.md
 !data/reference/
+
+# The Python template ignores lib/; the dashboard's source folder must be tracked.
+!frontend/lib/

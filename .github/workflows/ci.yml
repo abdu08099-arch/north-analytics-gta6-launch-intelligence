@@ -48,3 +48,24 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql+psycopg://ci:ci@localhost:5432/gta6_test
         run: uv run pytest
+
+  frontend:
+    name: Dashboard (typecheck, tests, static build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # Builds with no data products: every page must render its empty state.
+      - run: npm run build

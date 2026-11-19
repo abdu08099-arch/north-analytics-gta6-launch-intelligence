@@ -5,7 +5,7 @@ A data science project analyzing global GTA VI launch interest using Python, Goo
 
 ## Status
 
-**Phase 2 — First pipeline.** Three sources go from raw files to tables to JSON data products: GDELT news coverage, the curated event ledger, and manual Google Trends exports. The dashboard (Phase 5) will read the products in `data/products/`. Background: [Phase 0 report](docs/architecture/phase-0-discovery-report.md).
+**Phase 2 — First pipeline.** Three sources go from raw files to tables to JSON data products: GDELT news coverage, the curated event ledger, and manual Google Trends exports. The dashboard in `frontend/` reads the products in `data/products/`. Background: [Phase 0 report](docs/architecture/phase-0-discovery-report.md).
 
 | Source | Status |
 |---|---|
@@ -37,7 +37,7 @@ Details: [source register](docs/data/source-register.md).
 ├── docs/        architecture, data, methodology, decisions, team, operations
 ├── src/gta6_intelligence/  Python package: config, connectors, collection, db (+ migrations), utils
 ├── backend/     reserved; no API server in the MVP (Decision 0001)
-├── frontend/    Next.js static dashboard (Phase 5)
+├── frontend/    Next.js static dashboard: 8 pages, ECharts, reads data/products/
 ├── data/        local data, gitignored except reference/ (see data/README.md)
 ├── tests/       unit and integration tests, labelled fixtures
 └── .github/workflows/  CI and daily collection
@@ -76,6 +76,18 @@ To run the tests against PostgreSQL as well (CI does this on every PR), point `T
 
 ```bash
 TEST_DATABASE_URL=postgresql+psycopg://user@localhost:5432/gta6_test uv run pytest
+```
+
+### Dashboard
+
+The dashboard is a static Next.js site in `frontend/`. It reads the JSON files that `gta6 publish` writes to `data/products/`, at build time. Pages without data show an empty state that explains why.
+
+```bash
+uv run gta6 publish          # refresh data/products/
+cd frontend
+npm ci                       # Node 26 LTS (see frontend/.nvmrc)
+npm run dev                  # http://localhost:3000
+npm run build                # static site in frontend/out/
 ```
 
 ### pandas 3 note
